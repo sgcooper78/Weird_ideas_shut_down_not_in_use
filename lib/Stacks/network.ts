@@ -40,6 +40,7 @@ export class NetworkStack extends Stack {
   public readonly HttpsListener: ApplicationListener
   public readonly defaultCert: Certificate
   public readonly targetGroup: ApplicationTargetGroup
+  public readonly lambdaTargetGroup: ApplicationTargetGroup
 
   constructor(
     scope: Construct,
@@ -149,6 +150,11 @@ export class NetworkStack extends Stack {
         path: "/",
         healthyHttpCodes: "200-302",
       },
+    });
+
+    this.lambdaTargetGroup = new ApplicationTargetGroup(this, "LambdaTargetGroup", {
+      vpc: this.vpc,
+      targetType: TargetType.LAMBDA,
     });
 
   }
