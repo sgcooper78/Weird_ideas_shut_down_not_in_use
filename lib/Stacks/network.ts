@@ -95,7 +95,7 @@ export class NetworkStack extends Stack {
 
     //https://docs.aws.amazon.com/cdk/api/v2/docs/aws-cdk-lib.aws_certificatemanager.Certificate.html
     this.defaultCert = new Certificate(this, 'certificate', {
-      domainName: "db.scottgcooper.com",
+      domainName: "*.scottgcooper.com",
       validation: CertificateValidation.fromDns(zone),
     })
 
