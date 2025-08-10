@@ -1,32 +1,34 @@
-const { ECS, RDS, ELBV2 } = require("aws-sdk");
+const { ECSClient, UpdateServiceCommand, DescribeServicesCommand } = require("@aws-sdk/client-ecs");
+const { RDSClient, DescribeDBInstancesCommand, StartDBInstanceCommand } = require("@aws-sdk/client-rds");
+const { ELBV2Client, DescribeRulesCommand, ModifyRuleCommand } = require("@aws-sdk/client-elasticloadbalancingv2");
 
-const ecs = new ECS();
-const rds = new RDS();
-const elbv2 = new ELBV2();
+const ecsClient = new ECSClient();
+const rdsClient = new RDSClient();
+const elbv2Client = new ELBV2Client();
 
 exports.handler = async (event) => {
   try {
     console.log("Starting up infrastructure...");
 
     // 1. Start ECS service (set desired count to 1)
-    await ecs.updateService({
+    await ecsClient.send(new UpdateServiceCommand({
       cluster: process.env.ECS_CLUSTER_NAME,
       service: process.env.ECS_SERVICE_NAME,
       desiredCount: 1,
-    }).promise();
+    }));
 
     console.log("ECS service started with desired count 1");
 
     // 2. Start RDS instance if it's stopped
     try {
-      const dbInstance = await rds.describeDBInstances({
+      const dbInstance = await rdsClient.send(new DescribeDBInstancesCommand({
         DBInstanceIdentifier: process.env.RDS_INSTANCE_ID,
-      }).promise();
+      }));
 
       if (dbInstance.DBInstances && dbInstance.DBInstances[0] && dbInstance.DBInstances[0].DBInstanceStatus === "stopped") {
-        await rds.startDBInstance({
+        await rdsClient.send(new StartDBInstanceCommand({
           DBInstanceIdentifier: process.env.RDS_INSTANCE_ID,
-        }).promise();
+        }));
         console.log("RDS instance started");
       } else {
         console.log("RDS instance is already running");
@@ -69,9 +71,9 @@ exports.handler = async (event) => {
 async function swapListenerRulePriorities() {
   try {
     // Get current listener rules
-    const rules = await elbv2.describeRules({
+    const rules = await elbv2Client.send(new DescribeRulesCommand({
       ListenerArn: process.env.LISTENER_ARN,
-    }).promise();
+    }));
 
     // Find the Lambda rule and ECS rule
     const lambdaRule = rules.Rules && rules.Rules.find(rule => 
@@ -83,15 +85,15 @@ async function swapListenerRulePriorities() {
 
     if (lambdaRule && ecsRule) {
       // Swap priorities - ECS rule gets higher priority (1), Lambda gets lower (2)
-      await elbv2.modifyRule({
+      await elbv2Client.send(new ModifyRuleCommand({
         RuleArn: ecsRule.RuleArn,
         Priority: 1,
-      }).promise();
+      }));
 
-      await elbv2.modifyRule({
+      await elbv2Client.send(new ModifyRuleCommand({
         RuleArn: lambdaRule.RuleArn,
         Priority: 2,
-      }).promise();
+      }));
 
       console.log("Listener rule priorities swapped successfully");
     }
@@ -109,10 +111,10 @@ async function waitForInfrastructureReady() {
   
   while (attempts < maxAttempts) {
     try {
-      const service = await ecs.describeServices({
+      const service = await ecsClient.send(new DescribeServicesCommand({
         cluster: process.env.ECS_CLUSTER_NAME,
         services: [process.env.ECS_SERVICE_NAME],
-      }).promise();
+      }));
 
       const serviceStatus = service.services && service.services[0] ? service.services[0].status : '';
       const runningCount = service.services && service.services[0] ? service.services[0].runningCount : 0;
@@ -143,9 +145,9 @@ async function waitForInfrastructureReady() {
   attempts = 0;
   while (attempts < maxAttempts) {
     try {
-      const dbInstance = await rds.describeDBInstances({
+      const dbInstance = await rdsClient.send(new DescribeDBInstancesCommand({
         DBInstanceIdentifier: process.env.RDS_INSTANCE_ID,
-      }).promise();
+      }));
 
       const dbStatus = dbInstance.DBInstances && dbInstance.DBInstances[0] ? dbInstance.DBInstances[0].DBInstanceStatus : '';
       

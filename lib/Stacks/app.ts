@@ -95,7 +95,6 @@ export class AppStack extends Stack {
         dimensionsMap: {
           TargetGroup: props.targetGroup.targetGroupName,
           LoadBalancer: props.loadBalancer.loadBalancerName,
-          TargetGroupArn: props.targetGroup.targetGroupArn,
         },
         statistic: 'Sum',
         period: Duration.minutes(1),

@@ -55,7 +55,7 @@ export class ShutDownServicesLambda extends Construct {
     // Create the Lambda function
     this.lambdaFunction = new Function(this, "ShutdownFunction", {
       runtime: Runtime.NODEJS_22_X,
-      handler: "handler",
+      handler: "lambda.handler",
       code: Code.fromAsset(path.join(__dirname, "../../lambdas/shutdown")),
       role: lambdaRole,
       timeout: Duration.minutes(5),
