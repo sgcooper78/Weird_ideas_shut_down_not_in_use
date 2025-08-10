@@ -45,9 +45,10 @@ const appStack = new AppStack(app, 'AppStack', {
   ecsSecurityGroup: computeStack.ecsSecurityGroup,
   httpsListener: networkStack.HttpsListener,
   certificate: networkStack.defaultCert,
-  dbHost: databaseStack.databaseInstance.dbInstanceEndpointAddress,
+  dbInstance: databaseStack.databaseInstance,
   dbSecrets: databaseStack.dbSecrets,
   targetGroup: networkStack.targetGroup,
+  lambdaTargetGroup: networkStack.lambdaTargetGroup,
 });
 
 appStack.addDependency(networkStack);
