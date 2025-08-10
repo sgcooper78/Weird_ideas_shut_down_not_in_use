@@ -1,0 +1,27 @@
+{
+  "name": "spin_down_when_not_used",
+  "version": "0.1.0",
+  "bin": {
+    "spin_down_when_not_used": "bin/spin_down_when_not_used.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w",
+    "test": "jest",
+    "cdk": "cdk"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.14",
+    "@types/node": "22.7.9",
+    "aws-cdk": "2.1024.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.2.5",
+    "ts-node": "^10.9.2",
+    "typescript": "~5.6.3"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "2.208.0",
+    "cdk-fck-nat": "^1.6.8",
+    "constructs": "^10.0.0"
+  }
+}
