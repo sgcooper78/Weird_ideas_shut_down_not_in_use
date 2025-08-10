@@ -4,7 +4,7 @@ import { Code, Runtime } from "aws-cdk-lib/aws-lambda";
 import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { Role, ServicePrincipal, ManagedPolicy, PolicyDocument, Effect, PolicyStatement } from "aws-cdk-lib/aws-iam";
 import * as path from "path";
-import { ApplicationListenerRule, ApplicationTargetGroup, IApplicationListener } from "aws-cdk-lib/aws-elasticloadbalancingv2";
+import { ApplicationListenerRule, ApplicationTargetGroup, IApplicationListener, ListenerAction, ListenerCondition } from "aws-cdk-lib/aws-elasticloadbalancingv2";
 import { LambdaTarget } from "aws-cdk-lib/aws-elasticloadbalancingv2-targets";
 import { Cluster, IFargateService } from "aws-cdk-lib/aws-ecs";
 import { Function } from "aws-cdk-lib/aws-lambda";
@@ -68,5 +68,13 @@ export class StartUpServicesLambda extends Construct {
         });
 
         // props.targetGroup.addTarget(new LambdaTarget(this.lambdaFunction));
+
+        // props.listener.addAction("RedirectToLambda", {
+        //   priority: 2,
+        //   action: ListenerAction.forward([props.targetGroup]),
+        //   conditions: [
+        //     ListenerCondition.hostHeaders([`${props.domainName}`]),
+        //   ],
+        // });
     }
 }
