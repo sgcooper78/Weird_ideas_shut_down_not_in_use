@@ -1,5 +1,5 @@
 import { Construct } from "constructs";
-import { Duration } from "aws-cdk-lib";
+import { BundlingFileAccess, BundlingOutput, DockerImage, Duration, SymlinkFollowMode } from "aws-cdk-lib";
 import { Code, Runtime } from "aws-cdk-lib/aws-lambda";
 import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { Role, ServicePrincipal, ManagedPolicy, PolicyDocument, Effect, PolicyStatement } from "aws-cdk-lib/aws-iam";
@@ -54,10 +54,18 @@ export class ShutDownServicesLambda extends Construct {
 
     // Create the Lambda function
     this.lambdaFunction = new Function(this, "ShutdownFunction", {
-      runtime: Runtime.NODEJS_22_X,
+      runtime: Runtime.NODEJS_20_X,
       handler: "lambda.handler",
-      code: Code.fromAsset(path.join(__dirname, "../../lambdas/shutdown")),
-      role: lambdaRole,
+      code: Code.fromAsset(path.join(__dirname, "../../lambdas/startup"), {
+        bundling: {
+          command: ['sh', '-c', 'apt-get update && apt-get install -y zip && NODE_ENV=production npm install && zip -r /asset-output/function.zip .'],
+          image: DockerImage.fromRegistry('public.ecr.aws/docker/library/node:20.12.1'),
+          user: 'root',
+          bundlingFileAccess: BundlingFileAccess.VOLUME_COPY,
+          outputType: BundlingOutput.ARCHIVED,
+        },
+        followSymlinks: SymlinkFollowMode.ALWAYS,
+      }),      role: lambdaRole,
       timeout: Duration.minutes(5),
       environment: {
         ECS_SERVICE_NAME: props.ecsService.serviceName,
