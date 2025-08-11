@@ -54,7 +54,7 @@ export class StartUpServicesLambda extends Construct {
 
     // Create the Lambda function
     this.lambdaFunction = new Function(this, "StartupFunction", {
-      runtime: Runtime.NODEJS_20_X,
+      runtime: Runtime.NODEJS_LATEST,
       handler: "lambda.handler",
       code: Code.fromAsset(path.join(__dirname, "../../lambdas/startup"), {
         bundling: {
