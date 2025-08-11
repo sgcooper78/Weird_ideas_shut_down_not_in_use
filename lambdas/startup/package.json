@@ -9,6 +9,7 @@
   "author": "",
   "license": "ISC",
   "description": "",
+  "type": "module",
   "dependencies": {
     "@aws-sdk/client-elastic-load-balancing-v2": "^3.864.0"
   }

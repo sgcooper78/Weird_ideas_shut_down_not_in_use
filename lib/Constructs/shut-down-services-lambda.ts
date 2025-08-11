@@ -56,7 +56,7 @@ export class ShutDownServicesLambda extends Construct {
     this.lambdaFunction = new Function(this, "ShutdownFunction", {
       runtime: Runtime.NODEJS_20_X,
       handler: "lambda.handler",
-      code: Code.fromAsset(path.join(__dirname, "../../lambdas/startup"), {
+      code: Code.fromAsset(path.join(__dirname, "../../lambdas/shutdown"), {
         bundling: {
           command: ['sh', '-c', 'apt-get update && apt-get install -y zip && NODE_ENV=production npm install && zip -r /asset-output/function.zip .'],
           image: DockerImage.fromRegistry('public.ecr.aws/docker/library/node:20.12.1'),
