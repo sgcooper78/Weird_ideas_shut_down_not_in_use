@@ -1,10 +1,10 @@
 import { ECSClient, UpdateServiceCommand, DescribeServicesCommand } from "@aws-sdk/client-ecs";
 import { RDSClient, DescribeDBInstancesCommand, StopDBInstanceCommand } from "@aws-sdk/client-rds";
-import { ELBV2Client, DescribeRulesCommand, ModifyRuleCommand } from "@aws-sdk/client-elastic-load-balancing-v2";
+import { ElasticLoadBalancingV2Client, DescribeRulesCommand, ModifyRuleCommand } from "@aws-sdk/client-elastic-load-balancing-v2";
 
 const ecsClient = new ECSClient();
 const rdsClient = new RDSClient();
-const elbv2Client = new ELBV2Client();
+const elbv2Client = new ElasticLoadBalancingV2Client();
 
 export const handler = async (event) => {
   try {
