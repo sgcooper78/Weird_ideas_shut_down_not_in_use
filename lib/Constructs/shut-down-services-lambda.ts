@@ -56,16 +56,18 @@ export class ShutDownServicesLambda extends Construct {
     this.lambdaFunction = new Function(this, "ShutdownFunction", {
       runtime: Runtime.NODEJS_LATEST,
       handler: "lambda.handler",
-      code: Code.fromAsset(path.join(__dirname, "../../lambdas/shutdown"), {
-        bundling: {
-          command: ['sh', '-c', 'apt-get update && apt-get install -y zip && NODE_ENV=production npm install && zip -r /asset-output/function.zip .'],
-          image: DockerImage.fromRegistry('public.ecr.aws/docker/library/node:20.12.1'),
-          user: 'root',
-          bundlingFileAccess: BundlingFileAccess.VOLUME_COPY,
-          outputType: BundlingOutput.ARCHIVED,
-        },
-        followSymlinks: SymlinkFollowMode.ALWAYS,
-      }),      role: lambdaRole,
+      code: Code.fromAsset(path.join(__dirname, "../../lambdas/shutdown/")),
+      // code: Code.fromAsset(path.join(__dirname, "../../lambdas/shutdown"), {
+      //   bundling: {
+      //     command: ['sh', '-c', 'apt-get update && apt-get install -y zip && NODE_ENV=production npm install && zip -r /asset-output/function.zip .'],
+      //     image: DockerImage.fromRegistry('public.ecr.aws/docker/library/node:20.12.1'),
+      //     user: 'root',
+      //     bundlingFileAccess: BundlingFileAccess.VOLUME_COPY,
+      //     outputType: BundlingOutput.ARCHIVED,
+      //   },
+      //   followSymlinks: SymlinkFollowMode.ALWAYS,
+      // }), 
+      role: lambdaRole,
       timeout: Duration.minutes(5),
       environment: {
         ECS_SERVICE_NAME: props.ecsService.serviceName,

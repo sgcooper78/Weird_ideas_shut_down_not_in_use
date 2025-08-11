@@ -1,6 +1,6 @@
 import { ECSClient, UpdateServiceCommand, DescribeServicesCommand } from "@aws-sdk/client-ecs";
 import { RDSClient, DescribeDBInstancesCommand, StartDBInstanceCommand } from "@aws-sdk/client-rds";
-import { ELBV2Client, DescribeRulesCommand, ModifyRuleCommand } from "@aws-sdk/client-elasticloadbalancingv2";
+import { ELBV2Client, DescribeRulesCommand, ModifyRuleCommand } from "@aws-sdk/client-elastic-load-balancing-v2";
 
 const ecsClient = new ECSClient();
 const rdsClient = new RDSClient();
