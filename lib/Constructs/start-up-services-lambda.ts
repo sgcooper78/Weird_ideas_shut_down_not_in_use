@@ -26,24 +26,30 @@ export class StartUpServicesLambda extends Construct {
   constructor(scope: Construct, id: string, props: StartUpServicesLambdaProps) {
     super(scope, id);
     // Create IAM role for the Lambda
-    const lambdaRole = new Role(this, "ShutdownLambdaRole", {
+    const lambdaRole = new Role(this, "StartupLambdaRole", {
       assumedBy: new ServicePrincipal("lambda.amazonaws.com"),
       managedPolicies: [
         ManagedPolicy.fromAwsManagedPolicyName("service-role/AWSLambdaBasicExecutionRole"),
       ],
       inlinePolicies: {
-        "ShutdownPermissions": new PolicyDocument({
+        "StartupPermissions": new PolicyDocument({
           statements: [
             new PolicyStatement({
               effect: Effect.ALLOW,
               actions: [
                 "ecs:UpdateService",
                 "ecs:DescribeServices",
-                "rds:StopDBInstance",
+                "ecs:DescribeTasks",
+                "ecs:ListTasks",
+                "rds:StartDBInstance",
                 "rds:DescribeDBInstances",
-                "elasticloadbalancing:ModifyListenerRule",
-                "elasticloadbalancing:DescribeListenerRules",
-                "elasticloadbalancing:DescribeListeners"
+                "rds:DescribeDBClusters",
+                "elasticloadbalancing:ModifyRule",
+                "elasticloadbalancing:DescribeRules",
+                "elasticloadbalancing:DescribeListeners",
+                "elasticloadbalancing:DescribeLoadBalancers",
+                "elasticloadbalancing:DescribeTargetGroups",
+                "elasticloadbalancing:DescribeTargetHealth"
               ],
               resources: ["*"],
             }),

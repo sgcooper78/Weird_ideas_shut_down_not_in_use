@@ -39,11 +39,17 @@ export class ShutDownServicesLambda extends Construct {
               actions: [
                 "ecs:UpdateService",
                 "ecs:DescribeServices",
+                "ecs:DescribeTasks",
+                "ecs:ListTasks",
                 "rds:StopDBInstance",
                 "rds:DescribeDBInstances",
-                "elasticloadbalancing:ModifyListenerRule",
-                "elasticloadbalancing:DescribeListenerRules",
-                "elasticloadbalancing:DescribeListeners"
+                "rds:DescribeDBClusters",
+                "elasticloadbalancing:ModifyRule",
+                "elasticloadbalancing:DescribeRules",
+                "elasticloadbalancing:DescribeListeners",
+                "elasticloadbalancing:DescribeLoadBalancers",
+                "elasticloadbalancing:DescribeTargetGroups",
+                "elasticloadbalancing:DescribeTargetHealth"
               ],
               resources: ["*"],
             }),
