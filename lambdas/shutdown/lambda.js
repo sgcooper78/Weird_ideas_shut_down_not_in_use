@@ -1,12 +1,12 @@
-const { ECSClient, UpdateServiceCommand, DescribeServicesCommand } = require("@aws-sdk/client-ecs");
-const { RDSClient, DescribeDBInstancesCommand, StopDBInstanceCommand } = require("@aws-sdk/client-rds");
-const { ELBV2Client, DescribeRulesCommand, ModifyRuleCommand } = require("@aws-sdk/client-elasticloadbalancingv2");
+import { ECSClient, UpdateServiceCommand, DescribeServicesCommand } from "@aws-sdk/client-ecs";
+import { RDSClient, DescribeDBInstancesCommand, StopDBInstanceCommand } from "@aws-sdk/client-rds";
+import { ELBV2Client, DescribeRulesCommand, ModifyRuleCommand } from "@aws-sdk/client-elasticloadbalancingv2";
 
 const ecsClient = new ECSClient();
 const rdsClient = new RDSClient();
 const elbv2Client = new ELBV2Client();
 
-exports.handler = async (event) => {
+export const handler = async (event) => {
   try {
     console.log("Shutting down infrastructure...");
 
