@@ -57,6 +57,12 @@ export class StartUpServicesLambda extends Construct {
             runtime: Runtime.NODEJS_22_X,
             handler: "lambda.handler",
             code: Code.fromAsset(path.join(__dirname, "../../lambdas/startup")),
+            code: Code.fromCustomCommand({
+                command: "npm run build",
+                entrypoint: "node",
+                workingDirectory: path.join(__dirname, "../../lambdas/startup"),
+            }),
+
             role: lambdaRole,
             timeout: Duration.minutes(5),
             environment: {
