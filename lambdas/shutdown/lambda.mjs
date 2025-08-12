@@ -103,19 +103,37 @@ async function swapListenerRulePriorities() {
       // Swap priorities - Lambda rule gets higher priority (1), ECS gets lower (2)
       await elbv2Client.send(new ModifyRuleCommand({
         RuleArn: lambdaRule.RuleArn,
-        Priority: 1,
+        Priority: 1, // Use integer priority
         Conditions: cleanLambdaConditions,
         Actions: lambdaRule.Actions,
       }));
 
       await elbv2Client.send(new ModifyRuleCommand({
         RuleArn: ecsRule.RuleArn,
-        Priority: 2,
+        Priority: 2, // Use integer priority
         Conditions: cleanEcsConditions,
         Actions: ecsRule.Actions,
       }));
 
       console.log("Listener rule priorities swapped - Lambda now has priority 1, ECS has priority 2");
+      
+      // Verify the changes by getting the rules again
+      console.log("Verifying rule priorities...");
+      await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds for changes to propagate
+      
+      const updatedRules = await elbv2Client.send(new DescribeRulesCommand({
+        ListenerArn: process.env.LISTENER_ARN,
+      }));
+      
+      const updatedLambdaRule = updatedRules.Rules && updatedRules.Rules.find(rule => 
+        rule.RuleArn === lambdaRule.RuleArn
+      );
+      const updatedEcsRule = updatedRules.Rules && updatedRules.Rules.find(rule => 
+        rule.RuleArn === ecsRule.RuleArn
+      );
+      
+      console.log(`Updated priorities - Lambda: ${updatedLambdaRule?.Priority}, ECS: ${updatedEcsRule?.Priority}`);
+      
     } else {
       console.log("Could not find both Lambda and ECS rules");
     }
