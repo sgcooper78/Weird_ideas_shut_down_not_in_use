@@ -1,4 +1,4 @@
-import { ECSClient, UpdateServiceCommand, DescribeServicesCommand } from "@aws-sdk/client-ecs";
+import { ECSClient, UpdateServiceCommand } from "@aws-sdk/client-ecs";
 import { RDSClient, DescribeDBInstancesCommand, StopDBInstanceCommand } from "@aws-sdk/client-rds";
 import { ElasticLoadBalancingV2Client, DescribeRulesCommand, ModifyRuleCommand } from "@aws-sdk/client-elastic-load-balancing-v2";
 
@@ -10,22 +10,15 @@ export const handler = async (event) => {
   try {
     console.log("Shutting down infrastructure...");
 
-    // 1. Swap listener rule priorities back (Lambda gets priority 1, ECS gets priority 2)
-    await swapListenerRulePriorities();
-
-    // 2. Scale down ECS service to 0 desired count
+    // 1. Set ECS service desired count to 0 (don't wait)
     await ecsClient.send(new UpdateServiceCommand({
       cluster: process.env.ECS_CLUSTER_NAME,
       service: process.env.ECS_SERVICE_NAME,
       desiredCount: 0,
     }));
+    console.log("ECS service desired count set to 0");
 
-    console.log("ECS service scaled down to 0 desired count");
-
-    // 3. Wait for ECS tasks to drain
-    await waitForEcsTasksToDrain();
-
-    // 4. Stop RDS instance (don't wait for it to be fully stopped)
+    // 2. Stop RDS instance if it's running (don't wait)
     try {
       const dbInstance = await rdsClient.send(new DescribeDBInstancesCommand({
         DBInstanceIdentifier: process.env.RDS_INSTANCE_ID,
@@ -35,7 +28,7 @@ export const handler = async (event) => {
         await rdsClient.send(new StopDBInstanceCommand({
           DBInstanceIdentifier: process.env.RDS_INSTANCE_ID,
         }));
-        console.log("RDS instance stop initiated (not waiting for completion)");
+        console.log("RDS instance stop initiated");
       } else {
         console.log("RDS instance is already stopped or in another state");
       }
@@ -43,7 +36,10 @@ export const handler = async (event) => {
       console.log("Could not stop RDS instance:", error);
     }
 
-    console.log("Infrastructure shutdown completed successfully");
+    // 3. Swap listener rule priorities (Lambda gets priority 1, ECS gets priority 2)
+    await swapListenerRulePriorities();
+
+    console.log("Infrastructure shutdown initiated successfully");
 
   } catch (error) {
     console.error("Error shutting down infrastructure:", error);
@@ -82,43 +78,5 @@ async function swapListenerRulePriorities() {
     }
   } catch (error) {
     console.log("Could not swap listener rule priorities:", error);
-  }
-}
-
-async function waitForEcsTasksToDrain() {
-  console.log("Waiting for ECS tasks to drain...");
-  
-  let attempts = 0;
-  const maxAttempts = 60; // 10 minutes with 10 second intervals
-  
-  while (attempts < maxAttempts) {
-    try {
-      const service = await ecsClient.send(new DescribeServicesCommand({
-        cluster: process.env.ECS_CLUSTER_NAME,
-        services: [process.env.ECS_SERVICE_NAME],
-      }));
-
-      const runningCount = service.services && service.services[0] ? service.services[0].runningCount : 0;
-      const desiredCount = service.services && service.services[0] ? service.services[0].desiredCount : 0;
-
-      if (runningCount === 0 && desiredCount === 0) {
-        console.log("All ECS tasks have been drained");
-        break;
-      }
-
-      console.log(`ECS tasks: ${runningCount} running, ${desiredCount} desired`);
-      
-    } catch (error) {
-      console.log("Error checking ECS service status:", error);
-    }
-
-    attempts++;
-    if (attempts < maxAttempts) {
-      await new Promise(resolve => setTimeout(resolve, 10000)); // Wait 10 seconds
-    }
-  }
-
-  if (attempts >= maxAttempts) {
-    console.warn("ECS tasks did not drain completely in time, proceeding anyway");
   }
 }
