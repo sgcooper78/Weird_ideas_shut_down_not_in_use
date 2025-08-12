@@ -103,12 +103,16 @@ async function forwardRequestToEcsWithRetry(event) {
   console.log("Forwarding request to ECS service...");
   
   let attempts = 0;
-  const maxAttempts = 10; // Try up to 10 times
+  const retryInterval = 5000; // 5 seconds between retries
   
-  while (attempts < maxAttempts) {
+  while (true) { // Keep trying until Lambda times out or we succeed
+    attempts++;
+    console.log(`Attempt ${attempts}: Forwarding request to ECS...`);
+    
     try {
-      const targetUrl = `http://${process.env.ECS_SERVICE_HOST}:80${event.path || '/'}`;
-      console.log(`Attempt ${attempts + 1}: Forwarding request to: ${targetUrl}`);
+      // Use the actual URL from the event
+      const targetUrl = event.url || event.requestContext?.http?.url || event.path;
+      console.log(`Attempt ${attempts}: Forwarding request to: ${targetUrl}`);
 
       // Build the request body
       let body = '';
@@ -126,18 +130,18 @@ async function forwardRequestToEcsWithRetry(event) {
         });
       }
 
-      // Make the request to the ECS service
+      // Make the request to the ECS service using the actual URL
       const response = await fetch(targetUrl, {
         method: event.httpMethod || 'GET',
         headers: headers,
         body: body || undefined,
       });
 
-      // Check if we got a successful response or if ECS is still starting up
+      // Check if we got a successful response
       if (response.status === 200 || response.status === 201 || response.status === 202) {
         // Success! Get response body and return
         const responseBody = await response.text();
-        console.log(`Request successful on attempt ${attempts + 1}`);
+        console.log(`Request successful on attempt ${attempts}`);
         
         return {
           statusCode: response.status,
@@ -149,8 +153,8 @@ async function forwardRequestToEcsWithRetry(event) {
         };
       } else if (response.status === 503 || response.status === 502) {
         // Service still starting up, wait and retry
-        console.log(`ECS service still starting (status: ${response.status}), retrying in 2 seconds...`);
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        console.log(`ECS service still starting (status: ${response.status}), retrying in 5 seconds...`);
+        await new Promise(resolve => setTimeout(resolve, retryInterval));
       } else {
         // Other error status, return the error response
         const responseBody = await response.text();
@@ -167,12 +171,12 @@ async function forwardRequestToEcsWithRetry(event) {
       }
       
     } catch (error) {
-      console.log(`Attempt ${attempts + 1} failed:`, error.message);
+      console.log(`Attempt ${attempts} failed:`, error.message);
       
       // If it's a connection error, wait and retry
       if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
-        console.log("ECS service not yet accessible, retrying in 2 seconds...");
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        console.log("ECS service not yet accessible, retrying in 5 seconds...");
+        await new Promise(resolve => setTimeout(resolve, retryInterval));
       } else {
         // Other error, return error response
         return {
@@ -187,20 +191,10 @@ async function forwardRequestToEcsWithRetry(event) {
         };
       }
     }
-
-    attempts++;
-    if (attempts >= maxAttempts) {
-      console.log("Max retry attempts reached, returning service unavailable");
-      return {
-        statusCode: 503,
-        headers: {
-          'Content-Type': 'application/json',
-          'Retry-After': '30'
-        },
-        body: JSON.stringify({ 
-          message: "Service is still starting up, please try again in a moment"
-        }),
-      };
+    
+    // Log progress every 10 attempts
+    if (attempts % 10 === 0) {
+      console.log(`Still retrying... Attempt ${attempts} completed`);
     }
   }
 } 
