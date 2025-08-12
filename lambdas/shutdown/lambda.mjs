@@ -83,11 +83,15 @@ async function swapListenerRulePriorities() {
       await elbv2Client.send(new ModifyRuleCommand({
         RuleArn: lambdaRule.RuleArn,
         Priority: 1,
+        Conditions: lambdaRule.Conditions, // Include existing conditions
+        Actions: lambdaRule.Actions, // Include existing actions
       }));
 
       await elbv2Client.send(new ModifyRuleCommand({
         RuleArn: ecsRule.RuleArn,
         Priority: 2,
+        Conditions: ecsRule.Conditions, // Include existing conditions
+        Actions: ecsRule.Actions, // Include existing actions
       }));
 
       console.log("Listener rule priorities swapped - Lambda now has priority 1, ECS has priority 2");
