@@ -76,12 +76,19 @@ async function swapListenerRulePriorities() {
 
     console.log("Found rules:", JSON.stringify(rules.Rules, null, 2));
 
-    // Find the Lambda rule and ECS rule
+    // Find the Lambda rule and ECS rule by target group type
     const lambdaRule = rules.Rules && rules.Rules.find(rule => 
-      rule.Actions && rule.Actions[0] && rule.Actions[0].Type === "lambda"
+      rule.Actions && rule.Actions[0] && 
+      rule.Actions[0].Type === "forward" && 
+      rule.Actions[0].TargetGroupArn && 
+      rule.Actions[0].TargetGroupArn.includes("Lambd") // Look for Lambda target group
     );
+    
     const ecsRule = rules.Rules && rules.Rules.find(rule => 
-      rule.Actions && rule.Actions[0] && rule.Actions[0].Type === "forward"
+      rule.Actions && rule.Actions[0] && 
+      rule.Actions[0].Type === "forward" && 
+      rule.Actions[0].TargetGroupArn && 
+      !rule.Actions[0].TargetGroupArn.includes("Lambd") // Look for non-Lambda target group
     );
 
     console.log("Lambda rule:", lambdaRule ? lambdaRule.RuleArn : "Not found");
