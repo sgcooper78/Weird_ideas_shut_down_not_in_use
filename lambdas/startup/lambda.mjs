@@ -1,10 +1,48 @@
 import { ECSClient, UpdateServiceCommand, DescribeServicesCommand } from "@aws-sdk/client-ecs";
 import { RDSClient, DescribeDBInstancesCommand, StartDBInstanceCommand } from "@aws-sdk/client-rds";
-import { ElasticLoadBalancingV2Client, DescribeRulesCommand, ModifyRuleCommand } from "@aws-sdk/client-elastic-load-balancing-v2";
+import { ElasticLoadBalancingV2Client, DescribeRulesCommand, SetRulePrioritiesCommand } from "@aws-sdk/client-elastic-load-balancing-v2";
 
 const ecsClient = new ECSClient();
 const rdsClient = new RDSClient();
 const elbv2Client = new ElasticLoadBalancingV2Client();
+
+async function waitForEcsServiceReady() {
+  console.log("Waiting for ECS service to be ready...");
+  
+  let attempts = 0;
+  const maxAttempts = 30; // 5 minutes max wait
+  
+  while (attempts < maxAttempts) {
+    attempts++;
+    
+    try {
+      const serviceResponse = await ecsClient.send(new DescribeServicesCommand({
+        cluster: process.env.ECS_CLUSTER_NAME,
+        services: [process.env.ECS_SERVICE_NAME],
+      }));
+      
+      const service = serviceResponse.services[0];
+      console.log(`ECS service status: ${service.status}, desired: ${service.desiredCount}, running: ${service.runningCount}, pending: ${service.pendingCount}`);
+      
+      // Check if service is stable and has running tasks
+      if (service.status === 'ACTIVE' && 
+          service.runningCount >= 1 && 
+          service.pendingCount === 0) {
+        console.log("ECS service is ready with running tasks!");
+        return true;
+      }
+      
+      console.log(`Waiting for ECS service to be ready... (attempt ${attempts}/${maxAttempts})`);
+      await new Promise(resolve => setTimeout(resolve, 10000)); // Wait 10 seconds
+      
+    } catch (error) {
+      console.log(`Error checking ECS service status:`, error);
+      await new Promise(resolve => setTimeout(resolve, 10000));
+    }
+  }
+  
+  throw new Error("ECS service did not become ready within timeout period");
+}
 
 export const handler = async (event) => {
   try {
@@ -37,13 +75,21 @@ export const handler = async (event) => {
       console.log("Could not start RDS instance:", error);
     }
 
-    // 3. Swap listener rule priorities
+    // 3. Swap listener rule priorities FIRST - before any request forwarding
+    console.log("Swapping listener rule priorities to route traffic to ECS...");
     await swapListenerRulePriorities();
+    
+    // 4. Wait for ECS service to be fully ready
+    console.log("Waiting for ECS service to be ready...");
+    await waitForEcsServiceReady();
+    
+    // 5. Wait a moment for rule changes to propagate
+    console.log("Waiting for rule priority changes to propagate...");
+    await new Promise(resolve => setTimeout(resolve, 3000)); // Wait 3 seconds
 
     console.log("Infrastructure startup completed successfully");
 
-    // 4. Forward the original request to the ECS service immediately
-    // Don't wait for ECS to be fully ready, just check response codes
+    // 6. Now forward the original request to the ECS service
     const response = await forwardRequestToEcsWithRetry(event);
 
     return response;
@@ -97,41 +143,24 @@ async function swapListenerRulePriorities() {
     if (lambdaRule && ecsRule) {
       console.log(`Current priorities - Lambda: ${lambdaRule.Priority}, ECS: ${ecsRule.Priority}`);
       
-      // Clean up conditions to remove duplicate Values
-      const cleanLambdaConditions = lambdaRule.Conditions.map(condition => {
-        if (condition.Field === 'host-header') {
-          return {
-            Field: condition.Field,
-            HostHeaderConfig: condition.HostHeaderConfig
-          };
-        }
-        return condition;
-      });
-
-      const cleanEcsConditions = ecsRule.Conditions.map(condition => {
-        if (condition.Field === 'host-header') {
-          return {
-            Field: condition.Field,
-            HostHeaderConfig: condition.HostHeaderConfig
-          };
-        }
-        return condition;
-      });
+      // Use SetRulePriorities to change multiple rule priorities at once
+      console.log("Setting rule priorities using SetRulePriorities...");
       
-      // Swap priorities - ECS rule gets higher priority (1), Lambda gets lower (2)
-      await elbv2Client.send(new ModifyRuleCommand({
-        RuleArn: ecsRule.RuleArn,
-        Priority: 1, // Use integer priority
-        Conditions: cleanEcsConditions,
-        Actions: ecsRule.Actions,
+      const setPrioritiesResult = await elbv2Client.send(new SetRulePrioritiesCommand({
+        ListenerArn: process.env.LISTENER_ARN,
+        RulePriorities: [
+          {
+            RuleArn: ecsRule.RuleArn,
+            Priority: 1
+          },
+          {
+            RuleArn: lambdaRule.RuleArn,
+            Priority: 2
+          }
+        ]
       }));
-
-      await elbv2Client.send(new ModifyRuleCommand({
-        RuleArn: lambdaRule.RuleArn,
-        Priority: 2, // Use integer priority
-        Conditions: cleanLambdaConditions,
-        Actions: lambdaRule.Actions,
-      }));
+      
+      console.log("SetRulePriorities result:", setPrioritiesResult);
 
       console.log("Listener rule priorities swapped - ECS now has priority 1, Lambda has priority 2");
       
@@ -152,11 +181,20 @@ async function swapListenerRulePriorities() {
       
       console.log(`Updated priorities - Lambda: ${updatedLambdaRule?.Priority}, ECS: ${updatedEcsRule?.Priority}`);
       
+      if (updatedEcsRule?.Priority === "1" && updatedLambdaRule?.Priority === "2") {
+        console.log("SUCCESS: Rule priorities have been successfully updated!");
+      } else {
+        console.log("FAILURE: Rule priorities were not updated as expected");
+        console.log("Expected: ECS=1, Lambda=2");
+        console.log("Actual: ECS=" + updatedEcsRule?.Priority + ", Lambda=" + updatedLambdaRule?.Priority);
+      }
+      
     } else {
       console.log("Could not find both Lambda and ECS rules");
     }
   } catch (error) {
     console.log("Could not swap listener rule priorities:", error);
+    console.log("Error details:", JSON.stringify(error, null, 2));
   }
 }
 

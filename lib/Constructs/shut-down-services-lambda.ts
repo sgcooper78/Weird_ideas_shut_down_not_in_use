@@ -49,7 +49,8 @@ export class ShutDownServicesLambda extends Construct {
                 "elasticloadbalancing:DescribeListeners",
                 "elasticloadbalancing:DescribeLoadBalancers",
                 "elasticloadbalancing:DescribeTargetGroups",
-                "elasticloadbalancing:DescribeTargetHealth"
+                "elasticloadbalancing:DescribeTargetHealth",
+                "elasticloadbalancing:SetRulePriorities"
               ],
               resources: ["*"],
             }),

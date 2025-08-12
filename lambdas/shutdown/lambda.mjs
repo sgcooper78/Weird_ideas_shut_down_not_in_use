@@ -1,6 +1,6 @@
 import { ECSClient, UpdateServiceCommand } from "@aws-sdk/client-ecs";
 import { RDSClient, DescribeDBInstancesCommand, StopDBInstanceCommand } from "@aws-sdk/client-rds";
-import { ElasticLoadBalancingV2Client, DescribeRulesCommand, ModifyRuleCommand } from "@aws-sdk/client-elastic-load-balancing-v2";
+import { ElasticLoadBalancingV2Client, DescribeRulesCommand, ModifyRuleCommand, SetRulePrioritiesCommand } from "@aws-sdk/client-elastic-load-balancing-v2";
 
 const ecsClient = new ECSClient();
 const rdsClient = new RDSClient();
@@ -79,41 +79,24 @@ async function swapListenerRulePriorities() {
     if (lambdaRule && ecsRule) {
       console.log(`Current priorities - Lambda: ${lambdaRule.Priority}, ECS: ${ecsRule.Priority}`);
       
-      // Clean up conditions to remove duplicate Values
-      const cleanLambdaConditions = lambdaRule.Conditions.map(condition => {
-        if (condition.Field === 'host-header') {
-          return {
-            Field: condition.Field,
-            HostHeaderConfig: condition.HostHeaderConfig
-          };
-        }
-        return condition;
-      });
-
-      const cleanEcsConditions = ecsRule.Conditions.map(condition => {
-        if (condition.Field === 'host-header') {
-          return {
-            Field: condition.Field,
-            HostHeaderConfig: condition.HostHeaderConfig
-          };
-        }
-        return condition;
-      });
+      // Use SetRulePriorities to change multiple rule priorities at once
+      console.log("Setting rule priorities using SetRulePriorities...");
       
-      // Swap priorities - Lambda rule gets higher priority (1), ECS gets lower (2)
-      await elbv2Client.send(new ModifyRuleCommand({
-        RuleArn: lambdaRule.RuleArn,
-        Priority: 1, // Use integer priority
-        Conditions: cleanLambdaConditions,
-        Actions: lambdaRule.Actions,
+      const setPrioritiesResult = await elbv2Client.send(new SetRulePrioritiesCommand({
+        ListenerArn: process.env.LISTENER_ARN,
+        RulePriorities: [
+          {
+            RuleArn: lambdaRule.RuleArn,
+            Priority: 1
+          },
+          {
+            RuleArn: ecsRule.RuleArn,
+            Priority: 2
+          }
+        ]
       }));
-
-      await elbv2Client.send(new ModifyRuleCommand({
-        RuleArn: ecsRule.RuleArn,
-        Priority: 2, // Use integer priority
-        Conditions: cleanEcsConditions,
-        Actions: ecsRule.Actions,
-      }));
+      
+      console.log("SetRulePriorities result:", setPrioritiesResult);
 
       console.log("Listener rule priorities swapped - Lambda now has priority 1, ECS has priority 2");
       
@@ -134,10 +117,19 @@ async function swapListenerRulePriorities() {
       
       console.log(`Updated priorities - Lambda: ${updatedLambdaRule?.Priority}, ECS: ${updatedEcsRule?.Priority}`);
       
+      if (updatedLambdaRule?.Priority === "1" && updatedEcsRule?.Priority === "2") {
+        console.log("SUCCESS: Rule priorities have been successfully updated!");
+      } else {
+        console.log("FAILURE: Rule priorities were not updated as expected");
+        console.log("Expected: Lambda=1, ECS=2");
+        console.log("Actual: Lambda=" + updatedLambdaRule?.Priority + ", ECS=" + updatedEcsRule?.Priority);
+      }
+      
     } else {
       console.log("Could not find both Lambda and ECS rules");
     }
   } catch (error) {
     console.log("Could not swap listener rule priorities:", error);
+    console.log("Error details:", JSON.stringify(error, null, 2));
   }
 }

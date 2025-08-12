@@ -78,7 +78,7 @@ export class AppStack extends Stack {
     this.startupLambda = new StartUpServicesLambda(this, "StartupLambda", {
       cluster: props.cluster,
       ecsService: this.ecsService.ecsService,
-      listener: props.httpsListener,
+      httpsListener: props.httpsListener,
       domainName: 'db.scottgcooper.com',
       projectName: "phpmyadmin",
       dbID: props.dbInstance.instanceIdentifier,

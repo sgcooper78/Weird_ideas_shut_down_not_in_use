@@ -12,7 +12,7 @@ import { Function } from "aws-cdk-lib/aws-lambda";
 interface StartUpServicesLambdaProps {
   projectName: string;
   ecsService: IFargateService;
-  listener: IApplicationListener
+  httpsListener: IApplicationListener
   domainName: string;
   dbID: string;
   cluster: Cluster;
@@ -49,7 +49,8 @@ export class StartUpServicesLambda extends Construct {
                 "elasticloadbalancing:DescribeListeners",
                 "elasticloadbalancing:DescribeLoadBalancers",
                 "elasticloadbalancing:DescribeTargetGroups",
-                "elasticloadbalancing:DescribeTargetHealth"
+                "elasticloadbalancing:DescribeTargetHealth",
+                "elasticloadbalancing:SetRulePriorities"
               ],
               resources: ["*"],
             }),
@@ -80,6 +81,7 @@ export class StartUpServicesLambda extends Construct {
         ECS_CLUSTER_NAME: props.cluster.clusterName,
         RDS_INSTANCE_ID: props.dbID,
         DOMAIN_NAME: props.domainName,
+        LISTENER_ARN: props.httpsListener.listenerArn,
       },
     });
 
