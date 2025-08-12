@@ -63,7 +63,7 @@ async function swapListenerRulePriorities() {
     );
 
     if (lambdaRule && ecsRule) {
-      // Swap priorities back - Lambda rule gets higher priority (1), ECS gets lower (2)
+      // Swap priorities - Lambda rule gets higher priority (1), ECS gets lower (2)
       await elbv2Client.send(new ModifyRuleCommand({
         RuleArn: lambdaRule.RuleArn,
         Priority: 1,
@@ -74,7 +74,7 @@ async function swapListenerRulePriorities() {
         Priority: 2,
       }));
 
-      console.log("Listener rule priorities swapped back - Lambda now has priority 1");
+      console.log("Listener rule priorities swapped - Lambda now has priority 1, ECS has priority 2");
     }
   } catch (error) {
     console.log("Could not swap listener rule priorities:", error);

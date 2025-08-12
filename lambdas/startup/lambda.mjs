@@ -92,7 +92,7 @@ async function swapListenerRulePriorities() {
         Priority: 2,
       }));
 
-      console.log("Listener rule priorities swapped successfully");
+      console.log("Listener rule priorities swapped - ECS now has priority 1, Lambda has priority 2");
     }
   } catch (error) {
     console.log("Could not swap listener rule priorities:", error);
