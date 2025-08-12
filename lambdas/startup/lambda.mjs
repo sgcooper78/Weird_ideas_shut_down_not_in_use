@@ -67,10 +67,14 @@ export const handler = async (event) => {
 
 async function swapListenerRulePriorities() {
   try {
+    console.log("Starting rule priority swap...");
+    
     // Get current listener rules
     const rules = await elbv2Client.send(new DescribeRulesCommand({
       ListenerArn: process.env.LISTENER_ARN,
     }));
+
+    console.log("Found rules:", JSON.stringify(rules.Rules, null, 2));
 
     // Find the Lambda rule and ECS rule
     const lambdaRule = rules.Rules && rules.Rules.find(rule => 
@@ -80,7 +84,12 @@ async function swapListenerRulePriorities() {
       rule.Actions && rule.Actions[0] && rule.Actions[0].Type === "forward"
     );
 
+    console.log("Lambda rule:", lambdaRule ? lambdaRule.RuleArn : "Not found");
+    console.log("ECS rule:", ecsRule ? ecsRule.RuleArn : "Not found");
+
     if (lambdaRule && ecsRule) {
+      console.log(`Current priorities - Lambda: ${lambdaRule.Priority}, ECS: ${ecsRule.Priority}`);
+      
       // Swap priorities - ECS rule gets higher priority (1), Lambda gets lower (2)
       await elbv2Client.send(new ModifyRuleCommand({
         RuleArn: ecsRule.RuleArn,
@@ -93,6 +102,8 @@ async function swapListenerRulePriorities() {
       }));
 
       console.log("Listener rule priorities swapped - ECS now has priority 1, Lambda has priority 2");
+    } else {
+      console.log("Could not find both Lambda and ECS rules");
     }
   } catch (error) {
     console.log("Could not swap listener rule priorities:", error);
@@ -101,6 +112,7 @@ async function swapListenerRulePriorities() {
 
 async function forwardRequestToEcsWithRetry(event) {
   console.log("Forwarding request to ECS service...");
+  console.log("Event:", JSON.stringify(event, null, 2));
   
   let attempts = 0;
   const retryInterval = 5000; // 5 seconds between retries
@@ -130,6 +142,9 @@ async function forwardRequestToEcsWithRetry(event) {
         });
       }
 
+      console.log("Request headers:", headers);
+      console.log("Request method:", event.httpMethod || 'GET');
+
       // Make the request to the ECS service using the actual URL
       const response = await fetch(targetUrl, {
         method: event.httpMethod || 'GET',
@@ -138,12 +153,14 @@ async function forwardRequestToEcsWithRetry(event) {
       });
 
       console.log(`ECS response status: ${response.status}`);
+      console.log(`ECS response headers:`, Object.fromEntries(response.headers.entries()));
 
       // Only return success for 200-299 status codes
       if (response.status >= 200 && response.status < 300) {
         // Success! Get response body and return
         const responseBody = await response.text();
         console.log(`Request successful on attempt ${attempts} with status ${response.status}`);
+        console.log(`Response body length: ${responseBody.length}`);
         
         return {
           statusCode: response.status,
@@ -161,6 +178,7 @@ async function forwardRequestToEcsWithRetry(event) {
       
     } catch (error) {
       console.log(`Attempt ${attempts} failed:`, error.message);
+      console.log(`Error details:`, error);
       
       // Any error, wait and retry
       console.log("Request failed, retrying in 5 seconds...");

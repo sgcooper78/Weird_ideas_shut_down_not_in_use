@@ -49,10 +49,14 @@ export const handler = async (event) => {
 
 async function swapListenerRulePriorities() {
   try {
+    console.log("Starting rule priority swap...");
+    
     // Get current listener rules
     const rules = await elbv2Client.send(new DescribeRulesCommand({
       ListenerArn: process.env.LISTENER_ARN,
     }));
+
+    console.log("Found rules:", JSON.stringify(rules.Rules, null, 2));
 
     // Find the Lambda rule and ECS rule
     const lambdaRule = rules.Rules && rules.Rules.find(rule => 
@@ -62,7 +66,12 @@ async function swapListenerRulePriorities() {
       rule.Actions && rule.Actions[0] && rule.Actions[0].Type === "forward"
     );
 
+    console.log("Lambda rule:", lambdaRule ? lambdaRule.RuleArn : "Not found");
+    console.log("ECS rule:", ecsRule ? ecsRule.RuleArn : "Not found");
+
     if (lambdaRule && ecsRule) {
+      console.log(`Current priorities - Lambda: ${lambdaRule.Priority}, ECS: ${ecsRule.Priority}`);
+      
       // Swap priorities - Lambda rule gets higher priority (1), ECS gets lower (2)
       await elbv2Client.send(new ModifyRuleCommand({
         RuleArn: lambdaRule.RuleArn,
@@ -75,6 +84,8 @@ async function swapListenerRulePriorities() {
       }));
 
       console.log("Listener rule priorities swapped - Lambda now has priority 1, ECS has priority 2");
+    } else {
+      console.log("Could not find both Lambda and ECS rules");
     }
   } catch (error) {
     console.log("Could not swap listener rule priorities:", error);
