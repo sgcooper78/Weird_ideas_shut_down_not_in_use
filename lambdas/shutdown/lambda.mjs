@@ -25,7 +25,7 @@ export const handler = async (event) => {
     // 3. Wait for ECS tasks to drain
     await waitForEcsTasksToDrain();
 
-    // 4. Stop RDS instance
+    // 4. Stop RDS instance (don't wait for it to be fully stopped)
     try {
       const dbInstance = await rdsClient.send(new DescribeDBInstancesCommand({
         DBInstanceIdentifier: process.env.RDS_INSTANCE_ID,
@@ -35,7 +35,7 @@ export const handler = async (event) => {
         await rdsClient.send(new StopDBInstanceCommand({
           DBInstanceIdentifier: process.env.RDS_INSTANCE_ID,
         }));
-        console.log("RDS instance stopped");
+        console.log("RDS instance stop initiated (not waiting for completion)");
       } else {
         console.log("RDS instance is already stopped or in another state");
       }

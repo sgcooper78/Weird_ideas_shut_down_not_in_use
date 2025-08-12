@@ -19,7 +19,7 @@ export const handler = async (event) => {
 
     console.log("ECS service started with desired count 1");
 
-    // 2. Start RDS instance if it's stopped
+    // 2. Start RDS instance if it's stopped (don't wait for it to be ready)
     try {
       const dbInstance = await rdsClient.send(new DescribeDBInstancesCommand({
         DBInstanceIdentifier: process.env.RDS_INSTANCE_ID,
@@ -29,7 +29,7 @@ export const handler = async (event) => {
         await rdsClient.send(new StartDBInstanceCommand({
           DBInstanceIdentifier: process.env.RDS_INSTANCE_ID,
         }));
-        console.log("RDS instance started");
+        console.log("RDS instance start initiated (not waiting for completion)");
       } else {
         console.log("RDS instance is already running");
       }
@@ -42,18 +42,15 @@ export const handler = async (event) => {
 
     console.log("Infrastructure startup completed successfully");
 
-    // 4. Wait for ECS service to be stable and RDS to be available
-    await waitForInfrastructureReady();
-
-    // 5. Forward the original request to the ECS service
-    const response = await forwardRequestToEcs(event);
+    // 4. Forward the original request to the ECS service immediately
+    // Don't wait for ECS to be fully ready, just check response codes
+    const response = await forwardRequestToEcsWithRetry(event);
 
     return response;
 
   } catch (error) {
     console.error("Error starting infrastructure:", error);
     
-    // Return a 503 Service Unavailable while infrastructure is starting
     return {
       statusCode: 503,
       headers: {
@@ -102,131 +99,108 @@ async function swapListenerRulePriorities() {
   }
 }
 
-async function waitForInfrastructureReady() {
-  console.log("Waiting for infrastructure to be ready...");
+async function forwardRequestToEcsWithRetry(event) {
+  console.log("Forwarding request to ECS service...");
   
-  // Wait for ECS service to be stable
   let attempts = 0;
-  const maxAttempts = 30; // 5 minutes with 10 second intervals
+  const maxAttempts = 10; // Try up to 10 times
   
   while (attempts < maxAttempts) {
     try {
-      const service = await ecsClient.send(new DescribeServicesCommand({
-        cluster: process.env.ECS_CLUSTER_NAME,
-        services: [process.env.ECS_SERVICE_NAME],
-      }));
+      const targetUrl = `http://${process.env.ECS_SERVICE_HOST}:80${event.path || '/'}`;
+      console.log(`Attempt ${attempts + 1}: Forwarding request to: ${targetUrl}`);
 
-      const serviceStatus = service.services && service.services[0] ? service.services[0].status : '';
-      const runningCount = service.services && service.services[0] ? service.services[0].runningCount : 0;
-      const desiredCount = service.services && service.services[0] ? service.services[0].desiredCount : 0;
-
-      if (serviceStatus === 'ACTIVE' && runningCount === desiredCount && desiredCount === 1) {
-        console.log("ECS service is ready");
-        break;
+      // Build the request body
+      let body = '';
+      if (event.body) {
+        body = event.body;
       }
 
-      console.log(`ECS service status: ${serviceStatus}, running: ${runningCount}/${desiredCount}`);
-      
-    } catch (error) {
-      console.log("Error checking ECS service status:", error);
-    }
-
-    attempts++;
-    if (attempts < maxAttempts) {
-      await new Promise(resolve => setTimeout(resolve, 10000)); // Wait 10 seconds
-    }
-  }
-
-  if (attempts >= maxAttempts) {
-    throw new Error("ECS service did not become ready in time");
-  }
-
-  // Wait for RDS to be available
-  attempts = 0;
-  while (attempts < maxAttempts) {
-    try {
-      const dbInstance = await rdsClient.send(new DescribeDBInstancesCommand({
-        DBInstanceIdentifier: process.env.RDS_INSTANCE_ID,
-      }));
-
-      const dbStatus = dbInstance.DBInstances && dbInstance.DBInstances[0] ? dbInstance.DBInstances[0].DBInstanceStatus : '';
-      
-      if (dbStatus === 'available') {
-        console.log("RDS instance is available");
-        break;
+      // Build headers (filter out Lambda-specific headers)
+      const headers = {};
+      if (event.headers) {
+        Object.entries(event.headers).forEach(([key, value]) => {
+          if (value && !key.toLowerCase().startsWith('x-amz-') && key.toLowerCase() !== 'host') {
+            headers[key] = value;
+          }
+        });
       }
 
-      console.log(`RDS status: ${dbStatus}`);
-      
-    } catch (error) {
-      console.log("Error checking RDS status:", error);
-    }
-
-    attempts++;
-    if (attempts < maxAttempts) {
-      await new Promise(resolve => setTimeout(resolve, 10000)); // Wait 10 seconds
-    }
-  }
-
-  if (attempts >= maxAttempts) {
-    throw new Error("RDS instance did not become available in time");
-  }
-}
-
-async function forwardRequestToEcs(event) {
-  try {
-    const targetUrl = `http://${process.env.ECS_SERVICE_HOST}:80${event.path || '/'}`;
-    
-    console.log(`Forwarding request to: ${targetUrl}`);
-
-    // Build the request body
-    let body = '';
-    if (event.body) {
-      body = event.body;
-    }
-
-    // Build headers (filter out Lambda-specific headers)
-    const headers = {};
-    if (event.headers) {
-      Object.entries(event.headers).forEach(([key, value]) => {
-        if (value && !key.toLowerCase().startsWith('x-amz-') && key.toLowerCase() !== 'host') {
-          headers[key] = value;
-        }
+      // Make the request to the ECS service
+      const response = await fetch(targetUrl, {
+        method: event.httpMethod || 'GET',
+        headers: headers,
+        body: body || undefined,
       });
+
+      // Check if we got a successful response or if ECS is still starting up
+      if (response.status === 200 || response.status === 201 || response.status === 202) {
+        // Success! Get response body and return
+        const responseBody = await response.text();
+        console.log(`Request successful on attempt ${attempts + 1}`);
+        
+        return {
+          statusCode: response.status,
+          headers: {
+            'Content-Type': response.headers.get('content-type') || 'application/json',
+            ...Object.fromEntries(response.headers.entries()),
+          },
+          body: responseBody,
+        };
+      } else if (response.status === 503 || response.status === 502) {
+        // Service still starting up, wait and retry
+        console.log(`ECS service still starting (status: ${response.status}), retrying in 2 seconds...`);
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      } else {
+        // Other error status, return the error response
+        const responseBody = await response.text();
+        console.log(`ECS service returned error status: ${response.status}`);
+        
+        return {
+          statusCode: response.status,
+          headers: {
+            'Content-Type': response.headers.get('content-type') || 'application/json',
+            ...Object.fromEntries(response.headers.entries()),
+          },
+          body: responseBody,
+        };
+      }
+      
+    } catch (error) {
+      console.log(`Attempt ${attempts + 1} failed:`, error.message);
+      
+      // If it's a connection error, wait and retry
+      if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
+        console.log("ECS service not yet accessible, retrying in 2 seconds...");
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      } else {
+        // Other error, return error response
+        return {
+          statusCode: 502,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ 
+            message: "Error forwarding request to backend service",
+            error: error instanceof Error ? error.message : "Unknown error"
+          }),
+        };
+      }
     }
 
-    // Make the request to the ECS service
-    const response = await fetch(targetUrl, {
-      method: event.httpMethod || 'GET',
-      headers: headers,
-      body: body || undefined,
-    });
-
-    // Get response body
-    const responseBody = await response.text();
-
-    // Return the response from ECS
-    return {
-      statusCode: response.status,
-      headers: {
-        'Content-Type': response.headers.get('content-type') || 'application/json',
-        ...Object.fromEntries(response.headers.entries()),
-      },
-      body: responseBody,
-    };
-
-  } catch (error) {
-    console.error("Error forwarding request to ECS:", error);
-    
-    return {
-      statusCode: 502,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ 
-        message: "Error forwarding request to backend service",
-        error: error instanceof Error ? error.message : "Unknown error"
-      }),
-    };
+    attempts++;
+    if (attempts >= maxAttempts) {
+      console.log("Max retry attempts reached, returning service unavailable");
+      return {
+        statusCode: 503,
+        headers: {
+          'Content-Type': 'application/json',
+          'Retry-After': '30'
+        },
+        body: JSON.stringify({ 
+          message: "Service is still starting up, please try again in a moment"
+        }),
+      };
+    }
   }
 } 
