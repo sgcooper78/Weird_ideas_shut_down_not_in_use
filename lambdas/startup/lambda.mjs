@@ -211,7 +211,8 @@ async function forwardRequestToEcsWithRetry(event) {
     
     try {
       // Use the actual URL from the event
-      const targetUrl = event.url || event.requestContext?.http?.url || event.path;
+      const targetPath = event.url || event.requestContext?.http?.url || event.path;
+      const targetUrl = `https://db.scottgcooper.com${targetPath}`;
       console.log(`Attempt ${attempts}: Forwarding request to: ${targetUrl}`);
 
       // Build the request body

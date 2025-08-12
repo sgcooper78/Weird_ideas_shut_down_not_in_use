@@ -75,7 +75,7 @@ export class StartUpServicesLambda extends Construct {
       //   followSymlinks: SymlinkFollowMode.ALWAYS,
       // }),
       role: lambdaRole,
-      timeout: Duration.minutes(5),
+      timeout: Duration.minutes(15),
       environment: {
         ECS_SERVICE_NAME: props.ecsService.serviceName,
         ECS_CLUSTER_NAME: props.cluster.clusterName,
