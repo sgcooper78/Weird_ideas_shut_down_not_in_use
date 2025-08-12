@@ -97,19 +97,40 @@ async function swapListenerRulePriorities() {
     if (lambdaRule && ecsRule) {
       console.log(`Current priorities - Lambda: ${lambdaRule.Priority}, ECS: ${ecsRule.Priority}`);
       
+      // Clean up conditions to remove duplicate Values
+      const cleanLambdaConditions = lambdaRule.Conditions.map(condition => {
+        if (condition.Field === 'host-header') {
+          return {
+            Field: condition.Field,
+            HostHeaderConfig: condition.HostHeaderConfig
+          };
+        }
+        return condition;
+      });
+
+      const cleanEcsConditions = ecsRule.Conditions.map(condition => {
+        if (condition.Field === 'host-header') {
+          return {
+            Field: condition.Field,
+            HostHeaderConfig: condition.HostHeaderConfig
+          };
+        }
+        return condition;
+      });
+      
       // Swap priorities - ECS rule gets higher priority (1), Lambda gets lower (2)
       await elbv2Client.send(new ModifyRuleCommand({
         RuleArn: ecsRule.RuleArn,
         Priority: 1,
-        Conditions: ecsRule.Conditions, // Include existing conditions
-        Actions: ecsRule.Actions, // Include existing actions
+        Conditions: cleanEcsConditions,
+        Actions: ecsRule.Actions,
       }));
 
       await elbv2Client.send(new ModifyRuleCommand({
         RuleArn: lambdaRule.RuleArn,
         Priority: 2,
-        Conditions: lambdaRule.Conditions, // Include existing conditions
-        Actions: lambdaRule.Actions, // Include existing actions
+        Conditions: cleanLambdaConditions,
+        Actions: lambdaRule.Actions,
       }));
 
       console.log("Listener rule priorities swapped - ECS now has priority 1, Lambda has priority 2");
