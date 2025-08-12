@@ -111,9 +111,7 @@ async function forwardRequestToEcsWithRetry(event) {
     
     try {
       // Use the actual URL from the event
-
-      const targetPath = event.url || event.requestContext?.http?.url || event.path;
-      const targetUrl = `https://db.scottgcooper.com${targetPath}`;
+      const targetUrl = event.url || event.requestContext?.http?.url || event.path;
       console.log(`Attempt ${attempts}: Forwarding request to: ${targetUrl}`);
 
       // Build the request body
@@ -139,11 +137,13 @@ async function forwardRequestToEcsWithRetry(event) {
         body: body || undefined,
       });
 
-      // Check if we got a successful response
-      if (response.status === 200 || response.status === 201 || response.status === 202) {
+      console.log(`ECS response status: ${response.status}`);
+
+      // Only return success for 200-299 status codes
+      if (response.status >= 200 && response.status < 300) {
         // Success! Get response body and return
         const responseBody = await response.text();
-        console.log(`Request successful on attempt ${attempts}`);
+        console.log(`Request successful on attempt ${attempts} with status ${response.status}`);
         
         return {
           statusCode: response.status,
@@ -153,45 +153,18 @@ async function forwardRequestToEcsWithRetry(event) {
           },
           body: responseBody,
         };
-      } else if (response.status === 503 || response.status === 502) {
-        // Service still starting up, wait and retry
-        console.log(`ECS service still starting (status: ${response.status}), retrying in 5 seconds...`);
-        await new Promise(resolve => setTimeout(resolve, retryInterval));
       } else {
-        // Other error status, return the error response
-        const responseBody = await response.text();
-        console.log(`ECS service returned error status: ${response.status}`);
-        
-        return {
-          statusCode: response.status,
-          headers: {
-            'Content-Type': response.headers.get('content-type') || 'application/json',
-            ...Object.fromEntries(response.headers.entries()),
-          },
-          body: responseBody,
-        };
+        // Any other status code, retry
+        console.log(`Status code ${response.status} - retrying in 5 seconds...`);
+        await new Promise(resolve => setTimeout(resolve, retryInterval));
       }
       
     } catch (error) {
       console.log(`Attempt ${attempts} failed:`, error.message);
       
-      // If it's a connection error, wait and retry
-      if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
-        console.log("ECS service not yet accessible, retrying in 5 seconds...");
-        await new Promise(resolve => setTimeout(resolve, retryInterval));
-      } else {
-        // Other error, return error response
-        return {
-          statusCode: 502,
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ 
-            message: "Error forwarding request to backend service",
-            error: error instanceof Error ? error.message : "Unknown error"
-          }),
-        };
-      }
+      // Any error, wait and retry
+      console.log("Request failed, retrying in 5 seconds...");
+      await new Promise(resolve => setTimeout(resolve, retryInterval));
     }
     
     // Log progress every 10 attempts
